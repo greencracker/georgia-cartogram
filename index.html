@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+
+* {
+  outline: 1px solid pink !important;
+}
+
+div.tooltip {   
+  position: absolute;           
+  text-align: center;           
+  width: 60px;                  
+  height: 28px;                 
+  padding: 2px;                    
+  background-color: #99CC33;   
+  border: 0px;      
+  border-radius: 8px;           
+  pointer-events: none;
+  opacity: 0.2;        
+}
+
+
+body {
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  font-size: 12px;
+}
+
+#legendholder {
+  text-align: center;
+  font-size: 12px;
+}
+
+#chart {
+  text-align: center;
+  font-size: 12px;
+}
+
+#decorative_bar {
+  background-color: #99CC33;
+  height: 10px;
+}
+
+
+</style>
+<body>
+  <script>document.write('<script src="http://' + (location.host || 'localhost').split(':')[0] + ':35729/livereload.js?snipver=1"></' + 'script>')</script>
+
+
+<div id="legendholder">
+  <button id="click_to_run" onclick="do_update()">
+          View by Population
+  </button>
+  <button id="click_to_normal" onclick="do_normal()">
+        View Normal
+  </button><br><br>
+</div> <!-- close legendholder -->
+<div id="decorative_bar"></div>
+  <div style="text-align:center;">Hover over a county for details</div>
+<div id="chart">
+</div>
+
+<div>
+  <b>Notes, Thanks &amp; How-to:</b>
+  <p>Originally published on my old blog, April 2017.</p>
+
+  <p>Thanks to <a href="http://maggielee.net/wp-content/uploads/2015/06/cartogram.js">cartogram.js</a>, a JavaScript implementation of
+  <a href="http://lambert.nico.free.fr/tp/biblio/Dougeniketal1985.pdf">an algorithm to construct continuous area cartograms</a>,
+  by James A. Dougenik, Nicholas R. Chrisman and Duane R. Niemeyer,
+  ©1985 by the Association of American Geographers.</p>
+
+  <p>Cartogram.js is designed and built by Shawn Allen at
+  <a href="http://stamen.com">Stamen</a> and has a home on <a href="https://github.com/shawnbot/d3-cartogram/" target="_blank" rel="noopener noreferrer">Github</a>. It runs with
+  <a href="http://d3js.org">d3.js</a> by Mike Bostock.</p>
+
+  <p>This example runs with d3.v2, an older version.</p>
+  <p>It's based on a tutorial from <a href="http://www.limn.co.za/2013/10/making-a-cartogram/" target="_blank" rel="noopener noreferrer">Jeff Fletcher on his South Africa dataviz blog, Limn</a>. He bundles up the <a href="http://www.limn.co.za/dev/assets/cartogram.zip">appropriate versions of cartogram, topojson and d3 here.</a></p>
+
+  <p>And in my own Github repo, <a href="https://github.com/maggie-lee/georgia-cartogram" target="_blank" rel="noopener noreferrer">here's how I knitted all this together</a>.</p>
+
+  <p>Data source: Population estimate for July, 2016 from the <a href="https://www.census.gov/data/tables/2016/demo/popest/counties-total.html" target="_blank" rel="noopener noreferrer">U.S. Census</a>, downloaded April 25, 2017.</p>
+
+
+</div>
+
+<script src="src/scripts/d3.v2.min_.js"></script>
+<script src="src/scripts/topojson.js"></script>
+<script src="src/scripts/cartogram.js"></script>
+
+<script>
+
+
+
+var margin = {top: 10, bottom: 10, left: 10, right: 10},
+    width = parseInt(d3.select('#chart').style('width')),
+    width = width - margin.left - margin.right;
+
+// I need to size this within reason.
+// width is not ever going to be bigger than 600 px
+// If it's too big, I'm having a hard time figuring out scale and translate
+
+if (width > 600) {
+    width = 600;
+  }
+    
+var mapRatio = 1.2,
+    height = width * mapRatio;
+
+var tooltip_div = d3.select("body").append("div")   
+    .attr("class", "tooltip")               
+    .style("opacity", 0);
+
+
+var svg = d3.select("#chart").append("svg")
+    .attr("width", width-margin.left-margin.right)
+    .attr("height", height-margin.top-margin.bottom);
+
+var counties = svg.append("g")
+  .attr("id", "counties")
+  .selectAll("path");
+
+var projection = d3.geo.albersUsa()
+  .scale(width*12.2)
+  .translate([-(width*2.13), -(height*0.3)]);
+
+
+var topology,
+    geometries,
+    carto_features;
+
+var number_formatter = d3.format("0,000");
+
+var pop_data = d3.map();
+
+var carto = d3.cartogram()
+            .projection(projection)
+            .properties(function (d) {
+                // this add the "properties" properties to the geometries
+                return d.properties;
+            });
+
+d3.csv("src/data/pop_data_2016.csv", function (data) {
+            data.forEach(function (d) {
+                pop_data.set(d.GEOID10, [d.NAME10, d.POP]);
+            })
+        });
+
+d3.json("src/data/topo_GA_counties_simple.json", function (data) {
+  topology = data;
+  geometries = topology.objects['geo_GA_counties_simplified'].geometries;
+
+  var features = carto.features(topology, geometries),
+    path = d3.geo.path()
+      .projection(projection);
+
+
+      
+      //add this to make up for counties with a space in the name: .replace(/\s+/g, '')
+  counties = counties.data(features)
+      .enter()
+      .append("path")
+      .attr("class", "county")
+      // .attr("id", function (d) {return d.properties.GEOID10}) 
+      // .attr("fill", function (d, i) {return color(i);} )
+      .attr("id", function (d) {return d.properties.NAME10.replace(/\s+/g, '');})
+      .on("mouseover", function (d) {
+        console.log(number_formatter(pop_data.get(d.properties['GEOID10'])[1]))
+
+
+
+        d3.selectAll("#"+d.properties.NAME10.replace(/\s+/g, '')).style("fill", "#99CC33")
+        tooltip_div.transition()
+          .duration(200)
+          .style("opacity", 0.9)
+        tooltip_div .html(d.properties.NAME10 + "<br>" +
+          number_formatter(pop_data.get(d.properties['GEOID10'])[1]))
+          .style("left", (d3.event.pageX) + "px")
+          .style("top", (d3.event.pageY -28) + "px");
+      })
+      .on("mouseout", function (d) {
+         d3.selectAll("#"+d.properties.NAME10.replace(/\s+/g, '')).style("fill", "white")
+        tooltip_div.transition()
+          .duration(500)
+          .style("opacity", 0);
+      })
+
+      .attr("fill", "white")
+      .attr("d", path)
+      .attr("stroke", "black")
+      .attr("stroke-width", "0.3px")
+
+  do_update();
+
+
+})
+
+function do_normal() {
+
+  
+  d3.select("#click_to_normal").text("thinking...");
+  setTimeout(function () {
+
+  console.log("doing normal")
+
+
+  var features = carto.features(topology, geometries),
+    path = d3.geo.path()
+      .projection(projection);
+
+  counties.data(features)
+      .transition()
+        .duration(3750)
+        .each("end", function () {
+            d3.select("#click_to_normal").text("View Normal")
+        })
+       .attr("d", path);
+  }, 10);
+
+};
+
+function do_update() {
+
+
+
+  d3.select("#click_to_run").text("thinking...");
+  setTimeout(function () {
+
+    carto.value(function (d) {
+      // console.log(+pop_data.get(d.properties['GEOID10'])[1])
+      return +pop_data.get(d.properties['GEOID10'])[1];
+    });
+
+  if (carto_features == undefined)
+      carto_features = carto(topology, geometries).features;
+
+  counties.data(carto_features)
+    .text(function (d) {return d.properties.GEOID10;})
+    // .on("mouseover", console.log("moused"));
+
+
+  // console.log("line 118")
+
+  counties.transition()
+      .duration(3750)
+      .each("end", function () {
+          d3.select("#click_to_run").text("View by Population")
+          d3.select("#click_to_normal").text("View Normal")
+      })
+      .attr("d", carto.path);
+  }, 10);
+
+}
+
+
+
+
+</script> 
+
+
+</body>
+</html>
